@@ -1,0 +1,130 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red0\green0\blue191;\red96\green96\blue96;
+\red0\green115\blue0;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf2 (\
+~buffers = \cf3 Array\cf2 ();\
+\cf4 "/Users/alo/sounds/eclambone_samples/*"\cf2 .pathMatch.do(\{\cf3 |path|\cf2 \
+	~buffers = ~buffers.add(\cf3 Buffer\cf2 .read(s, path))\
+\});\
+)\
+\
+(\
+\cf3 SynthDef\cf2 (\cf5 \\playPatch\cf2 , \{\cf3 |out, buf, amp|\cf2 \
+	\cf3 var\cf2  sig;\
+	sig = \cf3 PlayBuf\cf2 .ar(1, buf, loop: 0, doneAction: 2);\
+	\cf3 Out\cf2 .ar(out, sig);\
+	\cf3 Out\cf2 .ar(0, sig.dup * amp)\
+\}).add;\
+\
+\cf3 SynthDef\cf2 (\cf5 \\recorder\cf2 , \{\cf3 |in, th, recEnabled, lag, time|\cf2 \
+	\cf3 var\cf2  input, ampctr, amptrig, amptrigkr, timer, bufindex, bufnums, detected, sampleCounter;\
+	bufnums = \cf3 ArrayControl\cf2 .kr(\cf5 \\bufnums\cf2 , 5, \{\cf3 |i|\cf2  i \});\
+	input = \cf3 In\cf2 .ar(in);\
+	ampctr = \cf3 Slope\cf2 .ar(\cf3 Lag\cf2 .ar(\cf3 Amplitude\cf2 .ar(input), lag));\
+	amptrig = ampctr > th;\
+	amptrigkr = \cf3 A2K\cf2 .kr(amptrig);\
+	timer = \cf3 Timer\cf2 .kr(amptrigkr);\
+	detected = timer >= time;\
+	bufindex = \cf3 Stepper\cf2 .kr(detected, min: 0, max: 4);\
+	sampleCounter = \cf3 Phasor\cf2 .kr(\
+		\cf3 DelayN\cf2 .kr(detected, 1/\cf3 ControlRate\cf2 .ir, 1/\cf3 ControlRate\cf2 .ir), 64, 0, s.sampleRate * 5 - 1, 0 );\
+	\cf3 RecordBuf\cf2 .ar(input, \cf3 Select\cf2 .kr(bufindex, bufnums), run: amptrig * recEnabled, loop: 0.0, trigger: detected);\
+	\cf3 SendReply\cf2 .kr(detected, \cf5 '/timer'\cf2 , [timer, bufindex, sampleCounter]);\
+\}).add;\
+\
+\
+~recbufs = (\{\cf3 |i|\cf2  \cf3 Buffer\cf2 .alloc(s, s.sampleRate * 6) \} ! 5);\
+~bus = \cf3 Bus\cf2 .audio(s);\
+~newbuffers = \cf3 Array\cf2 ();\
+~intervals = \cf3 MarkovSetN\cf2 (order: 3);\
+~bpm = 140;\
+~qround = 0.001;\
+~quant = (60/~bpm/4).round(~qround);\
+)\
+\
+\
+~intervals.next(0.214)\
+~seq = \cf3 Array\cf2 ();\
+8.do(\{\
+	~last.postln;\
+	~seq = ~event.add(~last);\
+	~last = ~intervals.next(~last);\
+\})\
+\
+~newbuffers.do(\cf3 _\cf2 .free)\
+~newbuffers.size\
+\
+~last = 0.214;\
+\
+\cf3 Routine\cf2 (\{\
+	~newbuffers.do(\{\cf3 |buf, i|\cf2 \
+		\cf3 var\cf2  dur;\
+		dur = buf.numFrames / buf.sampleRate; \
+		\cf3 Synth\cf2 (\cf5 \\playPatch\cf2 , [\cf5 \\out\cf2 , 99, \cf5 \\buf\cf2 , buf, \cf5 \\amp\cf2 , 1.0]);\
+		~last.wait;\
+		~last = ~intervals.next(~last);		\
+	\})\
+\}).play\
+\
+~newbuffers.do(\{\cf3 |buf, i|\cf2 \
+	buf.write(\cf4 "/Users/alo/sounds/eclam_loops/"\cf2  ++ i.asString ++ \cf4 ".aif"\cf2 )\
+\})\
+\
+~intervals.dict.keys(\cf3 Array\cf2 ).do(\{\cf3 |key|\cf2 \
+	\cf3 Post\cf2  << key << \cf4 ": "\cf2  << ~intervals.dict[key] << \cf3 Char\cf2 .nl;\
+\})\
+\
+\
+(\
+\
+~lastTime = 0;\
+\
+~addingBuffer = \cf3 false\cf2 ;\
+\
+~timeresp = \cf3 OSCresponderNode\cf2 (s.addr, \cf5 '/timer'\cf2 , \{\cf3 |ti, re, ms|\cf2 \
+	\cf3 var\cf2  buf;\
+	if (ms[5] < (s.sampleRate * 5))\
+	\{\
+		~addingBuffer = \cf3 true\cf2 ;\
+		if (~lastTime > 0)\
+		\{\
+			~intervals.read(~lastTime, ms[3].round(~quant))\
+		\};\
+		~lastTime = ms[3].round(~quant);\
+		\cf3 Routine\cf2 (\{\
+			buf = \cf3 Buffer\cf2 .alloc(s, ms[5]);\
+			s.sync;\
+			~recbufs[(ms[4] - 1).wrap(0, 4)].copyData(buf, 0, 0, buf.numFrames);\
+			s.sync; 	\
+			~newbuffers = ~newbuffers.add(buf);\
+			~addingBuffer = \cf3 false\cf2 ;\
+			\cf3 Post\cf2  << \cf4 "new buffer added-- dur:"\cf2  << (buf.numFrames / buf.sampleRate) << \cf3 Char\cf2 .nl;\
+		\}).play\
+	\};\
+\}).add;\
+\
+\cf3 CmdPeriod\cf2 .add(\{\
+	~timeresp.remove;\
+	~timeresp = \cf3 nil\cf2 ;\
+	~ampresp.remove;\
+	~ampresp = \cf3 nil\cf2 ;\
+\});\
+\
+\cf3 Routine\cf2 (\{\
+	~rec = \cf3 Synth\cf2 (\cf5 \\recorder\cf2 , [\cf5 \\in\cf2 , ~bus, \cf5 \\th\cf2 , 0.1, \cf5 \\lag\cf2 , 0.1, \cf5 \\recEnabled\cf2 , 1.0, \cf5 \\time\cf2 , 0.2])\
+		.setn(\cf5 \\bufnums\cf2 , ~recbufs.collect(\cf3 _\cf2 .bufnum));\
+	\
+	s.sync;\
+\
+	~buffers.scramble.do(\{\cf3 |buf|\cf2 \
+		\cf3 var\cf2  dur;\
+		dur = buf.numFrames / buf.sampleRate;\
+		\cf3 Synth\cf2 .before(~rec, \cf5 \\playPatch\cf2 , [\cf5 \\out\cf2 , ~bus, \cf5 \\buf\cf2 , buf, \cf5 \\amp\cf2 , 1.0]);\
+		dur.wait;\
+	\})\
+	\
+\}).play\
+)}

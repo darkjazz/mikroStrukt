@@ -1,0 +1,102 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red0\green0\blue191;\red96\green96\blue96;
+\red0\green115\blue0;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf2 ~fx = \cf3 FxLive\cf2 ().gui\
+\
+(\
+~buffers = \cf3 Array\cf2 ();\
+\cf4 "/Users/alo/sounds/eclambone_samples/*"\cf2 .pathMatch.do(\{\cf3 |path|\cf2 \
+	~buffers = ~buffers.add(\cf3 Buffer\cf2 .read(s, path))\
+\});\
+)\
+\
+(\
+~inputs = 5;\
+\
+\cf3 SynthDef\cf2 (\cf5 \\playPatch\cf2 , \{\cf3 |out, buf, amp|\cf2 \
+	\cf3 var\cf2  sig;\
+	sig = \cf3 PlayBuf\cf2 .ar(1, buf, loop: 0, doneAction: 2);\
+	\cf3 Out\cf2 .ar(out, sig);\
+	\cf3 Out\cf2 .ar(0, sig.dup * amp)\
+\}).add;\
+\
+\cf3 SynthDef\cf2 (\cf5 \\train\cf2 , \{\cf3 |in, th|\cf2 \
+	\cf3 var\cf2  input, fft, mfcc, onsets;\
+	input = \cf3 In\cf2 .ar(in);\
+	fft = \cf3 FFT\cf2 (\cf3 LocalBuf\cf2 (1024), input);\
+	onsets = \cf3 Onsets\cf2 .kr(fft, th);\
+	mfcc = \cf3 MFCC\cf2 .kr(fft, ~inputs);\
+	\cf3 SendReply\cf2 .kr(onsets, \cf5 '/mfcc'\cf2 , mfcc ++ [\cf3 SpecFlatness\cf2 .kr(fft)] );\
+\}).add;\
+\
+)\
+\
+1.0.neg - 2.5.neg / (1.5 - 2.5.neg)\
+\
+\cf4 "open /Users/alo/Development/som/visual/build/Debug/som.app"\cf2 .unixCmd\
+\
+~remote.sendMsg(\cf4 "/som/clear"\cf2 , 0.1)\
+\
+~remote.sendMsg(\cf4 "/som/alpha"\cf2 , 0.2)\
+\
+~remote.sendMsg(\cf4 "/som/zoom"\cf2 , -50)\
+\
+~remote.sendMsg(*([\cf4 "/som/patch"\cf2 ] ++ 1.asBinaryDigits(5)))\
+\
+~remote.sendMsg(*([\cf4 "/som/vector"\cf2 ] ++ \cf3 Array\cf2 .rand(6, 0.0, 1.0)))\
+\
+~remote.sendMsg(\cf4 "/som/init"\cf2 , 3000, 40, 40, 0.1);\
+\
+~remote.sendMsg(\cf4 "/som/quit"\cf2 , 0)\
+\
+(\
+\
+\cf3 var\cf2  bus, som, mfres, bmures, bmus, mins, maxs, last, bmu;\
+~remote = \cf3 NetAddr\cf2 (\cf4 "127.0.0.1"\cf2 , 7770);\
+bmus = \cf3 Array\cf2 .fill(5, \{ \cf3 Array\cf2 .rand(6, 0.0, 1.0) \});\
+\
+mins = (100!6);\
+maxs = (0!6);\
+\
+last = (19 ! 2);\
+bmu = (0 ! 6);\
+\
+mfres = \cf3 OSCresponderNode\cf2 (s.addr, \cf5 '/mfcc'\cf2 , \{\cf3 |ti, re, ms|\cf2 	\
+	~remote.sendMsg(*([\cf4 "/som/vector"\cf2 ] ++ ms[3..8]) );\
+\}).add;\
+\
+bmures = \cf3 OSCresponderNode\cf2 (\cf3 nil\cf2 , \cf5 '/som/bmu'\cf2 , \{\cf3 |ti, re, ms|\cf2 \
+	((last[0] - ms[1]).squared + (last[1] - ms[2]).squared).sqrt.postln;\
+	(bmu - ms[3..8]).squared.sum.sqrt.postln;\
+	\cf4 "-----"\cf2 .postln;\
+	last = ms[1..2];\
+	bmu = ms[3..8];\
+\}).add;\
+\
+\cf3 CmdPeriod\cf2 .add(\{ \
+	mfres.remove;\
+	bmures.remove;\
+	~timer.stop;\
+	~timer.close;\
+\});\
+~bus = \cf3 Bus\cf2 .audio(s);\
+som = \cf3 Synth\cf2 .tail(~grp, \cf5 \\train\cf2 , [\cf5 \\in\cf2 , ~bus, \cf5 \\th\cf2 , -30.dbamp]);\
+\
+\cf3 Routine\cf2 (\{\
+	~remote.sendMsg(\cf4 "/som/init"\cf2 , 3000, 40, 40, 0.1);\
+	\{ ~timer = \cf3 TimeDisplay\cf2 ().start \}.defer;\
+	\cf3 inf\cf2 .do(\{\
+		~buffers.scramble.do(\{\cf3 |buf|\cf2 \
+			\cf3 var\cf2  dur;\
+			dur = buf.numFrames / buf.sampleRate;\
+			\cf3 Synth\cf2 .before(som, \cf5 \\playPatch\cf2 , [\cf5 \\out\cf2 , ~bus, \cf5 \\buf\cf2 , buf, \\amp, 0.5]);\
+			dur.wait;\
+		\})\
+	\})\
+	\
+\}).play\
+\
+)}

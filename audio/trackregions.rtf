@@ -1,0 +1,216 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue191;\red96\green96\blue96;\red0\green115\blue0;
+\red191\green0\blue0;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf0 (\
+~buffers = \cf2 Array\cf0 ();\
+\cf3 "/Users/alo/sounds/eclambone_samples/*"\cf0 .pathMatch.do(\{\cf2 |path|\cf0 \
+	~buffers = ~buffers.add(\cf2 Buffer\cf0 .read(s, path))\
+\});\
+)\
+\
+~buffers.collect(\cf2 _\cf0 .path).do(\cf2 _\cf0 .postln)\
+\
+(\
+~inputs = 5;\
+\
+\cf2 SynthDef\cf0 (\cf4 \\playPatch\cf0 , \{\cf2 |out, buf, amp|\cf0 \
+	\cf2 var\cf0  sig;\
+	sig = \cf2 PlayBuf\cf0 .ar(1, buf, loop: 0, doneAction: 2);\
+	\cf2 Out\cf0 .ar(out, sig);\
+	\cf2 Out\cf0 .ar(0, sig.dup * amp)\
+\}).add;\
+\
+\cf2 SynthDef\cf0 (\cf4 \\train\cf0 , \{\cf2 |in, th|\cf0 \
+	\cf2 var\cf0  remain, error, input, fft, mfcc, onsets, spec, rectrig;\
+	input = \cf2 In\cf0 .ar(in);\
+	fft = \cf2 FFT\cf0 (\cf2 LocalBuf\cf0 (1024), input);\
+	onsets = \cf2 Onsets\cf0 .kr(fft, th);\
+	mfcc = \cf2 MFCC\cf0 .kr(fft, ~inputs);\
+	\cf2 SendReply\cf0 .kr(onsets, \cf4 '/mfcc'\cf0 , mfcc ++ [\cf2 SpecFlatness\cf0 .kr(fft)] );\
+\}).add;\
+\
+)\
+\
+~mfsom.trainCount\
+\
+(\
+~mfsom = \cf2 SOMap\cf0 (3000, 40, ~inputs + 1, 0.0, 1.0);\
+\
+~ecdict = \cf2 Event\cf0 ();\
+\
+32.do(\{\cf2 |i|\cf0  \
+	\cf2 var\cf0  str = \cf3 ""\cf0 ;\
+	i.asBinaryDigits(5).do(\{\cf2 |dg|\cf0  str = str ++ dg.asString \});\
+	str = str.insert(2, \cf3 "_"\cf0 );\
+	~ecdict[str.asSymbol] = (\
+		hits: 0,\
+		nodes: \cf2 Event\cf0 ()\
+	)\
+\});\
+\
+~mfwin = \cf2 Window\cf0 (\cf3 "..som.."\cf0 , \cf2 Rect\cf0 (100, 100, ~mfsom.size * 10 + 10, ~mfsom.size * 10 + 30)).front;\
+~mfwin.background = \cf2 Color\cf0 .grey(0.01);\
+t = \cf2 StaticText\cf0 (~mfwin, \cf2 Rect\cf0 (5, ~mfsom.size * 10 + 5, ~mfsom.size * 10, 20))\
+	.font_(\cf2 Font\cf0 (\cf3 "Skia"\cf0 , 10))\
+	.align_(\cf4 \\center\cf0 )\
+	.stringColor_(\cf2 Color\cf0 .grey(0.7))\
+	.string_(\cf3 ""\cf0 );\
+~mfwin.drawHook = \{\
+	\cf2 var\cf0  bmu;\
+	~mfsom.do(\{\cf2 |node, i, j|\cf0 \
+		\cf2 var\cf0  size, weights;\
+		weights = node.weights;\
+		\cf2 Pen\cf0 .color = \cf2 Color\cf0 .grey(1 - weights[5], weights[5]);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf5 //		Pen.fillRect(Rect(i*10+5, j*10+5, 10, 10));\cf0 \
+		\cf2 Pen\cf0 .fillRect(\cf2 Rect\cf0 (i*10+5, j*10+5, 10, 3));\
+		\cf2 Pen\cf0 .color = \cf2 Color\cf0 (*(weights[0..2] ++ (1.0 - weights[3] * 0.5)));\
+		size = weights[4].linlin(0, 1, 0.25, 2.0);			\cf2 Pen\cf0 .fillRect(\cf2 Rect\cf0 (i*10+5+(10-(size*10)/2),j*10+10, 10*size, 3));\
+\cf5 //		Pen.fillRect(Rect(i*10+5+(10-(size*10)/2),j*10+5+(10-(size*10)/2), 10*size, 10*size));\cf0 \
+		if (~mfbmu.notNil)\
+		\{\
+			if ((i == ~mfbmu.coords.x).and(j == ~mfbmu.coords.y))\
+			\{\
+				\cf2 Pen\cf0 .color = \cf2 Color\cf0 .grey(0.8, 0.4);\
+				\cf2 Pen\cf0 .fillOval(\cf2 Rect\cf0 (i*10+5,j*10+5, 10, 10));\
+			\}\
+		\};\
+		if (~avgbmu.notNil)\
+		\{\
+			if ((i == ~avgbmu.coords.x).and(j == ~avgbmu.coords.y))\
+			\{\
+				\cf2 Pen\cf0 .color = \cf2 Color\cf0 .grey(0.5, 0.4);\
+				\cf2 Pen\cf0 .strokeOval(\cf2 Rect\cf0 (i*10+5,j*10+5, 10, 10));\
+			\}	\
+		\};\
+\
+\cf5 //		if (i < 39) \{\cf0 \
+\cf5 //			Pen.color = Color(0.5, 0.5, \cf0 \
+\cf5 //				(node.weights - ~mfsom.nodes[i+1][j].weights).squared.sum.sqrt * 4, 0.5 );\cf0 \
+\cf5 //			Pen.line(Point(i*10+15, j*10+5), Point(i*10+15, j*10+15));\cf0 \
+\cf5 //			Pen.stroke;\cf0 \
+\cf5 //		\};\cf0 \
+\cf5 //		\cf0 \
+\cf5 //		if (j < 39) \{\cf0 \
+\cf5 //			Pen.color = Color(0.5, 0.5, \cf0 \
+\cf5 //				(node.weights - ~mfsom.nodes[i][j+1].weights).squared.sum.sqrt * 4, 0.5 );\cf0 \
+\cf5 //			Pen.line(Point(i*10+5, j*10+15), Point(i*10+15, j*10+15));\cf0 \
+\cf5 //			Pen.stroke;\cf0 \
+\cf5 //		\};\cf0 \
+		\
+		\
+		\
+	\});\
+	\
+	if (~mfsom.trainCount == ~mfsom.trainDuration)\
+	\{\
+		~ecdict[~currentPatchKey].nodes.keysValuesDo(\{\cf2 |key, val|\cf0 \
+			\cf2 Pen\cf0 .color = \cf2 Color\cf0 .grey(*(val.linlin(1, ~ecdict[~currentPatchKey].hits, 0.5, 1.0)!2));\
+			\cf2 Pen\cf0 .fillOval(\cf2 Rect\cf0 (*(key.asString.split($_).asInt*10+5)++(10!2)));\
+				\
+		\});	\
+	\}\
+\
+\};\
+\
+)\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 Routine\cf0 (\{\
+	~ecdict.keys(\cf2 Array\cf0 ).sort.do(\{\cf2 |key|\cf0 \
+		\{ t.string_( key.asString ) \}.defer;\
+		~currentPatchKey = key;\
+		\{ ~mfwin.refresh \}.defer;\
+		5.wait\
+	\})\
+\}).play\
+\
+~ecdict[~currentPatchKey].nodes.keysValuesDo(\{\cf2 |key, val|\cf0 \
+	((key.asString.split($_).asInt*10+5)++(10!2)++val.linlin(1, ~ecdict[~currentPatchKey].hits, 0.3, 1.0)).postln\
+\});\
+\
+~ecdict.keysValuesDo(\{\cf2 |key, patch|\cf0 \
+	[key, patch.hits, patch.nodes.size].postln\
+\})\
+\
+~mfsom.trainCount\
+\
+~grp = \cf2 Group\cf0 ();\
+\
+(\
+\
+\cf2 var\cf0  bus, som, mfres, spres, bmus;\
+\
+bmus = \cf2 Array\cf0 .fill(5, \{ \cf2 Array\cf0 .rand(6, 0.0, 1.0) \});\
+\
+mfres = \cf2 OSCresponderNode\cf0 (s.addr, \cf4 '/mfcc'\cf0 , \{\cf2 |ti, re, ms|\cf0 \
+	\cf2 var\cf0  key;\
+	if (~mfsom.trainCount < ~mfsom.trainDuration) \
+		\{ ~mfbmu = ~mfsom.train(ms[3..8]) \}\
+		\{ ~mfbmu = ~mfsom.findBMU(ms[3..8]) \};\
+	bmus.pop;\
+	bmus.insert(0, ~mfbmu.weights);\
+	~avgbmu = ~mfsom.findBMU(bmus.sum / bmus.size);\
+	if ((~currentPatchKey.notNil).and(~mfsom.trainCount == ~mfsom.trainDuration))\
+	\{\
+		~ecdict[~currentPatchKey].hits = ~ecdict[~currentPatchKey].hits + 1;\
+		key = (~avgbmu.coords.x.asString ++ \cf3 "_"\cf0  ++ ~avgbmu.coords.y.asString).asSymbol;\
+		if (~ecdict[~currentPatchKey].nodes.includesKey(key))\
+		\{\
+			~ecdict[~currentPatchKey].nodes[key] = ~ecdict[~currentPatchKey].nodes[key] + 1;\
+		\}\
+		\{\
+			~ecdict[~currentPatchKey].nodes[key] = 1;\
+		\}\
+	\};\
+	\{ ~mfwin.refresh \}.defer;\
+\}).add;\
+\
+\cf2 CmdPeriod\cf0 .add(\{ \
+	mfres.remove; \
+\});\
+~bus = \cf2 Bus\cf0 .audio(s);\
+som = \cf2 Synth\cf0 .tail(~grp, \cf4 \\train\cf0 , [\cf4 \\in\cf0 , ~bus, \cf4 \\th\cf0 , -30.dbamp]);\
+\
+\cf2 Routine\cf0 (\{\
+	\{ ~timer = \cf2 TimeDisplay\cf0 ().start \}.defer;\
+	\cf2 inf\cf0 .do(\{\
+		~buffers.scramble.do(\{\cf2 |buf|\cf0 \
+			\cf2 var\cf0  dur;\
+			dur = buf.numFrames / buf.sampleRate;\
+			\{ t.string_( buf.path.basename ) \}.defer;\
+			~currentPatchKey = buf.path.basename.split($.)[0].keep(6).asSymbol;\
+			\cf2 Synth\cf0 .before(som, \cf4 \\playPatch\cf0 , [\cf4 \\out\cf0 , ~bus, \cf4 \\buf\cf0 , buf]);\
+			dur.wait;\
+		\})\
+	\})\
+	\
+\}).play\
+\
+)\
+\
+~freqs = \cf2 Array\cf0 .geom(4, 0.25, 2);\
+~wrps = \cf2 Array\cf0 .geom(4, 0.1, 0.4);\
+~abus = \cf2 Bus\cf0 .audio(s, 4);\
+\
+~dec = \cf2 Synth\cf0 .after(~grp, \cf4 \\btoUHJ\cf0 , [\cf4 \\bus\cf0 , ~abus, \cf4 \\amp\cf0 , 1])\
+\
+~line = \cf2 Array\cf0 .fill(4, \{\cf2 |i|\cf0 \
+	\cf2 Synth\cf0 .tail(~grp, \cf4 \\line\cf0 , [\cf4 \\out\cf0 , ~abus, \cf4 \\in\cf0 , ~bus, \cf4 \\gate\cf0 , 1.0, \cf4 \\i_wrp\cf0 , ~wrps[i], \cf4 \\frq\cf0 , ~freqs[i], \cf4 \\wsz\cf0 , 0.1, \
+		\cf4 \\dns\cf0 , 6, \cf4 \\rnd\cf0 , 0.01, \cf4 \\amp\cf0 , 1.0, \cf4 \\rmp\cf0 , 0.1, \cf4 \\rtm\cf0 , 20\
+	]);\
+\})\
+~line.set(\cf4 \\gate\cf0 , -30)\
+~line.do(\cf2 _\cf0 .set(\cf4 \\out\cf0 , ~abus))\
+~line.do(\cf2 _\cf0 .set(\cf4 \\gate\cf0 , -30))\
+~line.set(\cf4 \\frq\cf0 , 1.0)\
+~dec.free\
+~wrps.do(\{\cf2 |val, i|\cf0  ~line[i].set(\cf4 \\wrp\cf0 , val) \})\
+s.queryAllNodes\
+\
+s.prepareForRecord("/Users/alo/sounds/satoshicycles.aif")\
+s.record\
+s.stopRecording}

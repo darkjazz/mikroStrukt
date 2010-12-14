@@ -1,0 +1,168 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red0\green0\blue191;\red96\green96\blue96;
+\red0\green115\blue0;\red191\green0\blue0;\red0\green0\blue191;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf2 (\
+~buffers = \cf3 Array\cf2 ();\
+\cf4 "/Users/alo/sounds/eclambone_samples/*"\cf2 .pathMatch.do(\{\cf3 |path|\cf2 \
+	~buffers = ~buffers.add(\cf3 Buffer\cf2 .read(s, path))\
+\});\
+)\
+\
+~buffers.collect(\cf3 _\cf2 .path).do(\cf3 _\cf2 .postln)\
+\
+(\
+~inputs = 5;\
+\
+\cf3 SynthDef\cf2 (\cf5 \\playPatch\cf2 , \{\cf3 |out, buf|\cf2 \
+	\cf3 var\cf2  sig;\
+	sig = \cf3 PlayBuf\cf2 .ar(1, buf, loop: 0, doneAction: 2);\
+	\cf3 Out\cf2 .ar(out, sig);\
+	\cf3 Out\cf2 .ar(0, sig.dup * 0.1)\
+\}).add;\
+\
+\cf3 SynthDef\cf2 (\cf5 \\train\cf2 , \{\cf3 |in, th, sombuf|\cf2 \
+	\cf3 var\cf2  remain, error, input, fft, mfcc, onsets;\
+	input = \cf3 In\cf2 .ar(in);\
+	fft = \cf3 FFT\cf2 (\cf3 LocalBuf\cf2 (1024), input);\
+	onsets = \cf3 Onsets\cf2 .kr(fft, th);\
+	mfcc = \cf3 MFCC\cf2 .kr(fft, ~inputs);\
+	\cf3 SendReply\cf2 .kr(onsets, \cf5 '/mfcc'\cf2 , mfcc);\
+\}).add;\
+)\
+\
+\
+(\
+~som = \cf3 SOMap\cf2 (3000, 40, ~inputs, 0.0, 1.0);\
+~hi = 1.0;\
+~lo = 0.0;\
+\
+w = \cf3 Window\cf2 (\cf4 "..som.."\cf2 , \cf3 Rect\cf2 (100, 100, ~som.size * 10 + 10, ~som.size * 10 + 30)).front;\
+w.background = \cf3 Color\cf2 .grey(0.01);\
+t = \cf3 StaticText\cf2 (w, \cf3 Rect\cf2 (5, ~som.size * 10 + 5, ~som.size * 10, 20))\
+	.font_(\cf3 Font\cf2 (\cf4 "Skia"\cf2 , 10))\
+	.align_(\cf5 \\center\cf2 )\
+	.stringColor_(\cf3 Color\cf2 .grey(0.7))\
+	.string_(\cf4 ""\cf2 );\
+w.drawHook = \{\
+	~som.do(\{\cf3 |node, i, j|\cf2 \
+		\cf3 var\cf2  size, weights, min, max;\
+		min = node.weights.minItem;\
+		max = node.weights.maxItem; \
+		if (max > ~hi) \{ ~hi = max \};\
+		if (min < ~lo) \{ ~lo = min \}; 		\
+		weights = node.weights; \cf6 //.linexp(~lo, ~hi, 0.05, 0.95);\cf2 \
+		\cf3 Pen\cf2 .color = \cf3 Color\cf2 (*(weights[0..2] ++ (1.0 - weights[3])));\
+		size = weights[4].linlin(0, 1, 0.25, 2.0);\
+\cf6 //		Pen.color = Color.grey(node.weights.mean);\cf2 \
+		\cf3 Pen\cf2 .fillRect(\cf3 Rect\cf2 (node.coords.x*10+5+(10-(size*10)/2),node.coords.y*10+5+(10-(size*10)/2), 10*size, 10*size));\
+		if (~bmu.notNil)\
+		\{\
+			if ((i == ~bmu.coords.x).and(j == ~bmu.coords.y))\
+			\{\
+				\cf3 Pen\cf2 .color = \cf3 Color\cf2 .grey(0.8, 0.6);\
+				\cf3 Pen\cf2 .fillOval(\cf3 Rect\cf2 (node.coords.x*10+5,node.coords.y*10+5, 10, 10));\
+			\}\
+		\}\
+		\
+	\})	\
+\};\
+\
+)\
+\
+~som.trainCount\
+\
+(\
+\
+\cf3 var\cf2  bus, som, resp, res;\
+res = \cf3 OSCresponderNode\cf2 (s.addr, \cf5 '/mfcc'\cf2 , \{\cf3 |ti, re, ms|\cf2  \
+	if (~som.trainCount < ~som.trainDuration) \{ ~bmu = ~som.train(ms[3..7]) \}\
+		\{ ~bmu = ~som.findBMU(ms[3..7]) \};\
+	\{ w.refresh \}.defer;\
+\}).add;\
+\cf3 CmdPeriod\cf2 .add(\{ res.remove \});\
+bus = \cf3 Bus\cf2 .audio(s);\
+som = \cf3 Synth\cf2 (\cf5 \\train\cf2 , [\cf5 \\in\cf2 , bus, \cf5 \\th\cf2 , -40.dbamp]);\
+\
+\cf3 Routine\cf2 (\{\
+	\cf3 inf\cf2 .do(\{\
+		~buffers.scramble.do(\{\cf3 |buf|\cf2 \
+			\cf3 var\cf2  dur;\
+			dur = buf.numFrames / buf.sampleRate;\
+			\{ t.string_( buf.path.basename ) \}.defer;\
+			\cf3 Synth\cf2 .before(som, \cf5 \\playPatch\cf2 , [\cf5 \\out\cf2 , bus, \cf5 \\buf\cf2 , buf]);\
+			dur.wait;\
+		\})\
+	\})\
+	\
+\}).play\
+\
+)\
+\
+~diffmap = \cf3 Array\cf2 .fill(~som.size - 1, \{ \cf3 Array\cf2 .fill(~som.size - 1, \{ 0.0 \}) \});\
+\
+~diffmap.do(\{\cf3 |row, i|\cf2 \
+	row.do(\{\cf3 |item, j|\cf2 \
+		\cf3 var\cf2  nodeA, nodeB;\
+		nodeA = ~som.nodes[i][j];\
+		nodeB = ~som.nodes[i+1][j];\
+		~diffmap[i][j] = (nodeA.weights - nodeB.weights).squared.sum.sqrt;\
+	\})\
+\})\
+\
+(\
+\cf3 var\cf2  win;\
+win = \cf3 Window\cf2 (\cf4 "..som.."\cf2 , \cf3 Rect\cf2 (100, 100, ~som.size * 10 + 10, ~som.size * 10 + 10)).front;\
+win.background = \cf3 Color\cf2 .white;\
+win.drawHook = \{\
+	~som.do(\{\cf3 |node, i, j|\cf2 \
+		\cf3 var\cf2  valL, valB;\
+		if (~som.size - 1 > i)\
+		\{\
+			valL = (node.weights - ~som.nodes[i+1][j].weights).squared.sum.sqrt;\
+			\cf3 Pen\cf2 .color = \cf3 Color\cf2 .grey(1 - valL);\
+			\cf3 Pen\cf2 .line(\cf3 Point\cf2 (i*10+15, j*10+5), \cf3 Point\cf2 (i*10+15, j*10+15));\
+			\cf3 Pen\cf2 .fillStroke;\
+		\};\
+		if (~som.nodes.size - 1 > j)\
+		\{\
+			valB = (node.weights - ~som.nodes[i][j+1].weights).squared.sum.sqrt;\
+			\cf3 Pen\cf2 .color = \cf3 Color\cf2 .grey(1 - valB);\
+			\cf3 Pen\cf2 .line(\cf3 Point\cf2 (i*10+5, j*10+15), \cf3 Point\cf2 (i*10+15, j*10+15));\
+			\cf3 Pen\cf2 .fillStroke;			\
+		\}\
+	\})\
+\};\
+)\
+\
+x = 0; n = 0;\
+~som.do(\{\cf3 |no|\cf2 \
+	\cf3 var\cf2  min, max;\
+	min = no.weights.minItem;\
+	max = no.weights.maxItem; \
+	if (max > x) \{ x = max \};\
+	if (min < n) \{ n = min \}; \
+\})\
+x\
+n\
+\
+a = \cf3 Array\cf2 .rand(6, -1.0, 2.0)\
+a.linlin(-1.0, 2.0, 0.0, 1.0)\
+\
+\
+~som.do(\{\cf3 |no|\cf2  no.weights.postln \})\
+\
+\
+~mw = \cf3 Window\cf2 (\cf4 ""\cf2 , \cf3 Rect\cf2 (100, 100, 100, 100)).front;\
+~mw.background_(Color.black)\
+~mw.drawHook = \{\
+	\cf3 Pen\cf2 .color = \cf3 Color\cf2 (*~som.nodes[0][0].weights.keep(4));\
+	\cf3 Pen\cf2 .fillRect(\cf3 Rect\cf2 (10, 10, 40, 80));\
+	Pen.color = Color(1.0,0.0,0.0341,0.409);\
+\cf0 	\cf7 Pen\cf0 .fillRect(\cf7 Rect\cf0 (50, 10, 40, 80));\
+\cf2 \}\
+c = \cf7 Color\cf0 (*~som.nodes[0][0].weights.keep(4))\
+\
+}

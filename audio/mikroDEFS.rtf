@@ -1,0 +1,297 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red191\green0\blue0;\red0\green0\blue0;\red0\green0\blue191;
+\red0\green115\blue0;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf2 // live input\cf3 \
+[\
+\cf4 SynthDef\cf3 (\cf5 \\fbgverb\cf3 , \{\cf4 |out, in, gate = 1.0, i_wrp = 0.1, frq, wsz, dns, rnd, amp, xang, yang, zang|\cf3 \
+	\cf4 var\cf3  bufs, recs, ptrs, phases, deltimes, output, trigs, input, w, x, y, z;\
+	deltimes = [0, 1 / i_wrp * 0.5, 1 / i_wrp];\
+	bufs = \cf4 Array\cf3 .fill(3, \{ \cf4 LocalBuf\cf3 (\cf4 SampleRate\cf3 .ir * 2) \});\
+	ptrs = \cf4 Array\cf3 .fill(3, \{\cf4 |i|\cf3  \cf4 LFSaw\cf3 .kr(i_wrp, 0, 0.5, 0.5) \});\
+	trigs = \cf4 Array\cf3 .fill(3, \{\cf4 |i|\cf3  \cf4 DelayN\cf3 .kr(\cf4 Impulse\cf3 .kr(i_wrp * (2 / 3)), deltimes@i, deltimes@i) \});\
+	input = \cf4 In\cf3 .ar(in);\
+	recs = \cf4 Mix\cf3 .fill(3, \{\cf4 |i|\cf3 \
+		\cf4 RecordBuf\cf3 .ar(input, bufs@i, loop:0.0, trigger: trigs@i);\
+	\});\
+	output = \cf4 Mix\cf3 .fill(3, \{\cf4 |i|\cf3 \
+		\cf4 Warp1\cf3 .ar(1, bufs@i, ptrs@i, frq, wsz, -1, dns, rnd)\
+			* \cf4 EnvGen\cf3 .kr(\
+				\cf4 Env\cf3 ([0.0,1.0,1.0,0.0],[0.3,0.4,0.3],\cf5 \\sine\cf3 , 0, 3),\
+				trigs.rotate(-1)@i, timeScale: 1.0 / i_wrp\
+			)\
+	\}) * \cf4 EnvGen\cf3 .kr(\cf4 Env\cf3 ([0.001, 1.0, 1.0, 0.001], [0.3, 0.4, 0.3], \cf5 \\sine\cf3 , 2, 1), gate, doneAction: 2);\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(\
+			output,\
+			\cf4 DelayN\cf3 .ar(output, 0.01, 0.01),\
+			\cf4 DelayN\cf3 .ar(output, 0.02, 0.02),\
+			\cf4 DelayN\cf3 .ar(output, 0.03, 0.03)\
+	) * amp;\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang))\
+\}),\
+\
+\cf4 SynthDef\cf3 (\cf5 \\latch\cf3 , \{\cf4 |out, in, th, eb1, eb2, rt, damp, bw, sp, dry, early, tail, azm, rho, \
+		gate=1, amp, xang, yang, zang|\cf3 \
+	\
+	\cf4 var\cf3  input, freq, trig, fft, gtrig, rL, rR, w, x, y, z, env, sig, pitch, a, b, c, d;\
+	env = \cf4 Control\cf3 .names([\cf5 \\env\cf3 ]).kr(\cf4 Env\cf3 .newClear(8).asArray);\
+	input = \cf4 In\cf3 .ar(in);\
+	pitch = \cf4 Pitch\cf3 .kr(input)[0];\
+	fft = \cf4 FFT\cf3 (\cf4 LocalBuf\cf3 (512), input);\
+	trig = \cf4 Onsets\cf3 .kr(fft, th);\
+	freq = \cf4 Latch\cf3 .ar(pitch, trig);\
+	gtrig = \cf4 Dust\cf3 .kr(\cf4 SinOsc\cf3 .kr(\cf4 LFNoise2\cf3 .kr(0.5)).range(8, 64));\
+	sig = \cf4 SinGrainI\cf3 .ar(\
+		gtrig, \
+		\cf4 Timer\cf3 .kr(gtrig).clip(0.001, 1.0) * 0.5, \
+		\cf4 Select\cf3 .kr(\cf4 TIRand\cf3 .kr(0, 6, gtrig), \
+			[freq*0.125, freq*0.25, freq*0.5, freq, freq*2, freq*4, freq*8]), \
+		eb1, \
+		eb2, \
+		\cf4 EnvGen\cf3 .kr(\cf4 Env\cf3 ([0.001, 1.0], [1], \cf5 \\sine\cf3 ), trig, timeScale: \cf4 TRand\cf3 .kr(0.3, 3.0, trig))\
+	);\
+	a = \cf4 BLowShelf\cf3 .ar(sig, 100, 0.5, 0.5);\
+	b = \cf4 BPeakEQ\cf3 .ar(sig, 800, 5.0, -16);\
+	c = \cf4 BHiShelf\cf3 .ar(sig, 10000, 1.0, 1.0);\
+	d = \cf4 BPeakEQ\cf3 .ar(sig, 3000, 3.0, -8);\
+	#rL, rR = \cf4 GVerb\cf3 .ar(sig, 500, rt, damp, bw, sp, dry, early, tail, 500)\
+		* \cf4 EnvGen\cf3 .kr(env, gate, doneAction: 2);\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a + rL, b + rR, c + rR, d + rL);\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang))\
+\}),\
+\
+\cf4 SynthDef\cf3 (\cf5 \\cliq\cf3 , \{\cf4 |out, in, th, gate=1, amp, sdur, pth|\cf3 \
+	\
+	\cf4 var\cf3   w, x, y, z, input, freq, trig, fft, gtrig, bfr, env, sig, pch, snd, senv, a, b, c, d;\
+	env = \cf4 Control\cf3 .names([\cf5 \\env\cf3 ]).kr(\cf4 Env\cf3 .newClear(8).asArray);\
+	input = \cf4 In\cf3 .ar(in);\
+	pch = \cf4 Pitch\cf3 .kr(input);\
+	fft = \cf4 FFT\cf3 (\cf4 LocalBuf\cf3 (512), input);\
+	trig = \cf4 Trig\cf3 .ar(\cf4 Onsets\cf3 .kr(fft, th), 0.0025);\
+	gtrig = \cf4 Trig\cf3 .ar(trig, 1);\
+	senv = \cf4 EnvGen\cf3 .kr(\cf4 Env\cf3 ([0.001, 1.0, 1.0, 0.001], [0.01, sdur, 0.1], \cf5 \\exp\cf3 ), gtrig);\
+	sig = \cf4 Mix\cf3 (\
+		\cf4 BPF\cf3 .ar(\
+			\cf4 LFTri\cf3 .ar(20, 0, \cf4 Decay\cf3 .ar(trig, 0.001 * \cf4 LFNoise1\cf3 .ar(4).abs)),\
+			15000,\'a0\
+			0.9,\'a0\
+			25 * \cf4 LFNoise1\cf3 .ar(8).range(0, 1)\'a0\
+		).fold(-1, 1));\
+	sig = \cf4 Mix\cf3 (sig + \cf4 GVerb\cf3 .ar(sig, 1, 0.5, 0.9, 0.9, 1, 0, 0.05, 0.1));\
+	snd = \cf4 Reverb\cf3 .ar(\cf4 Select\cf3 .ar(pch > pth, \
+		[\cf4 Mix\cf3 (\cf4 SinOsc\cf3 .ar(\cf4 Array\cf3 .geom(7, \cf4 Rand\cf3 (40.0, 50.0), 2**(1/5)), 0, \
+			\cf4 Array\cf3 .geom(7, 1.0, 15/16), 0.5pi).tanh) * 0.1, \
+			\cf4 SinOsc\cf3 .ar(pch * 100, 0.5pi, 0.05)\
+	]), 1).fold(-1, 1) * senv;\
+	sig = \cf4 Mix\cf3 (sig + snd) * \cf4 EnvGen\cf3 .kr(env, gate, doneAction: 2);\
+	#a, b, c, d = [\
+		\cf4 BLowShelf\cf3 .ar(sig, 100, 0.5, 0.5),\
+	 	\cf4 BPeakEQ\cf3 .ar(sig, 800, 5.0, -8),\
+		\cf4 BHiShelf\cf3 .ar(sig, 10000, 1.0, 1.0),\
+		\cf4 BPeakEQ\cf3 .ar(sig, 3000, 3.0, -4)\
+	];\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+ 	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, \
+		\cf4 TRand\cf3 .kr(-pi, pi, trig), \cf4 TRand\cf3 .kr(-pi, pi, trig), \cf4 TRand\cf3 .kr(-pi, pi, trig) ))\
+\}),\
+\
+\cf4 SynthDef\cf3 (\cf5 \\grains\cf3 , \{\cf4 |out, in, gate=1, maxdel, xang, yang, zang, bfrq|\cf3 \
+	\cf4 var\cf3  a, b, c, d, env, trig, dns, frq, dur, amz, w, x, y, z, input, rnd, ebf;\
+	env = \cf4 EnvControl\cf3 .kr;\
+	dns = \cf4 ArrayControl\cf3 .kr(\cf5 \\dns\cf3 , 4, 1);\
+	dur = \cf4 ArrayControl\cf3 .kr(\cf5 \\dur\cf3 , 4, 1);\
+	rnd = \cf4 ArrayControl\cf3 .kr(\cf5 \\rnd\cf3 , 4, 1);\
+	frq = \cf4 ArrayControl\cf3 .kr(\cf5 \\frq\cf3 , 4, 1);\
+	amz = \cf4 ArrayControl\cf3 .kr(\cf5 \\amz\cf3 , 4, 1);\
+	input = \cf4 CombL\cf3 .ar(\cf4 In\cf3 .ar(in), frq, frq, 4) * \cf4 EnvGen\cf3 .kr(env, gate, doneAction: 2);\
+	trig = \cf4 DelayL\cf3 .kr(\cf4 Impulse\cf3 .kr(dns), maxdel, \cf4 TRand\cf3 .kr(0, rnd, \cf4 Impulse\cf3 .kr(dns*2)));\
+	#a, b, c, d = \cf4 InGrain\cf3 .ar(trig, dur, \
+		(\cf4 PitchShift\cf3 .ar(input, pitchRatio: frq\
+			add: \cf4 LPF\cf3 .ar(\cf4 LFSaw\cf3 .ar(bfrq*frq), \cf4 LFSaw\cf3 .ar((1..4)).exprange(40, 4000)) \
+		)*10).tanh, \
+		amz);\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang))\
+\}),\
+\
+\cf4 SynthDef\cf3 (\cf5 \\streamverb\cf3 , \{\cf4 |out, in, rmsize, rtime, hfd, inbw, spread, dry, early, tail, max, amp, \
+		gate=1.0, slope, xang, yang, zang|\cf3 \
+	\cf4 var\cf3  sig, gverb, ps, ampctr, pu, output, env, a, b, c, d, w, x, y, z;\
+	sig = \cf4 In\cf3 .ar(in);\
+	ampctr = \cf4 Lag\cf3 .kr(\cf4 Amplitude\cf3 .kr(sig), 0.25);\
+	env = \cf4 EnvGen\cf3 .kr(\cf4 EnvControl\cf3 .kr, gate, doneAction: 2);\
+	gverb = \cf4 GVerb\cf3 .ar(sig, rmsize, rtime, hfd, inbw, spread, dry, early, tail, max) * env;\
+	ps = \cf4 PitchShift\cf3 .ar(gverb, \cf4 LFNoise2\cf3 .kr(0.27, 0.19, 0.2), 1.66, ampctr * amp, ampctr * amp);\
+	pu = \cf4 DelayC\cf3 .ar(\
+		\cf4 PitchShift\cf3 .ar(gverb, \cf4 LFNoise2\cf3 .kr(0.31, 0.19, 0.2), 0.33, ampctr * amp, ampctr * amp),\
+		0.05, 0.05);\
+	sig = \cf4 Compander\cf3 .ar(ps ++ pu, ps ++ pu, 0.95, slope, 0.1, 0.04, 0.1);\
+	#a, b, c, d = \cf4 LeakDC\cf3 .ar(sig);\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang))\
+\}),\
+\
+\cf2 // buffer proccesses\cf3 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf4 SynthDef\cf3 (\cf5 \\pch\cf3 , \{\cf4 |out = 0, in, bufnum, amp, start, winSize, shift, pdisp, tdisp, pow, \
+	dur, revamp, deltime, gate = 1.0, xang, yang, zang|\cf3 \
+	\cf4 var\cf3  sig, w, x, y, z, point, input, env, a, b, c, d, freqs, bws, eqf, eqr, eqdb;\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 	eqf = \cf4 ArrayControl\cf3 .kr(\cf5 \\eqf\cf3 , 4, 1);\
+	eqr = \cf4 ArrayControl\cf3 .kr(\cf5 \\eqr\cf3 , 4, 1);\
+	eqdb = \cf4 ArrayControl\cf3 .kr(\cf5 \\eqdb\cf3 , 4, 0);	\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf3 	env = \cf4 EnvControl\cf3 .kr;\
+	sig = \cf4 DelayC\cf3 .ar(\
+		\cf4 PitchShift\cf3 .ar(\
+			\cf4 PlayBuf\cf3 .ar(\
+				1, \
+				bufnum,\
+				\cf4 LFNoise1\cf3 .kr(\cf4 LFNoise0\cf3 .kr(10, 10, 20), 0.01, 1.0),\
+				\cf4 Dust\cf3 .kr(start),\
+				\cf4 LFNoise0\cf3 .kr(start, 0, \cf4 BufFrames\cf3 .kr(bufnum)),\
+				1.0\
+			) ** pow,\
+			winSize, \
+			\cf4 LFNoise2\cf3 .kr(\cf4 LFNoise0\cf3 .kr(1, 1, 2), shift, 1.0),\
+			pdisp,\
+			tdisp,\
+			0.5 + (\cf4 In\cf3 .ar(in) * \cf4 LFPulse\cf3 .kr(2, 0, 0.5, 0.25, 0.5))\
+		), 2, deltime\
+	) * \cf4 EnvGen\cf3 .kr(env, gate, timeScale: dur, doneAction: 2);\
+	sig = sig + \cf4 Reverb\cf3 .ar(sig * revamp, \cf4 Rand\cf3 (2, 4));\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 	a = \cf4 BLowShelf\cf3 .ar(sig, eqf@0, eqr@0, eqdb@0 );\
+	b = \cf4 BPeakEQ\cf3 .ar(sig, eqf@1, eqr@1, eqdb@1 );\
+	c = \cf4 BPeakEQ\cf3 .ar(sig, eqf@2, eqr@2, eqdb@2 );\
+	d = \cf4 BHiShelf\cf3 .ar(sig, eqf@3, eqr@3, eqdb@3 );\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf3 	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang))\
+\}),\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 \
+\cf4 SynthDef\cf3 (\cf5 \\bufplay\cf3 , \{\cf4 |out, buf, amp, meters, xang, yang, zang|\cf3 \
+	\cf4 var\cf3  sig, a, b, c, d, del, amps, w, x, y, z;\
+	del = \cf4 ArrayControl\cf3 .kr(\cf5 \\delay\cf3 , 4, 1);\
+	amps = \cf4 ArrayControl\cf3 .kr(\cf5 \\amps\cf3 , 4, 1);\
+	sig = \cf4 PlayBuf\cf3 .ar(1, buf, loop: 0, doneAction: 2);\
+	#a, b, c, d = (\{\cf4 |i|\cf3  \cf4 DelayC\cf3 .ar(sig, del[i], del[i], amps[i]) \} ! 4);\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+	#w, x, y, z = \cf4 AtkDistance\cf3 .ar(w, x, y, z, meters);\
+	\cf4 Out\cf3 .ar(0, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang) * amp)\
+\}),\
+\
+\cf4 SynthDef\cf3 (\cf5 \\bufmod\cf3 , \{\cf4 |out, bufc, freqc, bufm, freqm, wsz, which = 0, pch, \
+		amp, wrate, pd, td, maxdel, xang, yang, zang, gate=1|\cf3 \
+	\cf4 var\cf3  sig, bf, winsize, env, a, b, c, d, del, shift, w, x, y, z;\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	del = \cf4 ArrayControl\cf3 .kr(\cf5 \\delays\cf3 , 4, 0);\
+	shift = \cf4 ArrayControl\cf3 .kr(\cf5 \\shifts\cf3 , 4, 1);	\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf3 	env = \cf4 EnvControl\cf3 .kr;\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 	winsize = \cf4 Select\cf3 .kr(which, [wsz, \cf4 TRand\cf3 .kr(0.01, 0.2, \cf4 Impulse\cf3 .kr(wrate))]);\
+	sig = \cf4 PitchShift\cf3 .ar(\cf4 Osc\cf3 .ar(bufc, freqc, \cf4 Osc\cf3 .ar(bufm, freqm)), \
+		winsize, pch, pd, td) * \cf4 EnvGen\cf3 .kr(env, gate, doneAction: 2);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	#a, b, c, d = \cf4 Array\cf3 .fill(4, \{\cf4 |i|\cf3 \
+		\cf4 PitchShift\cf3 .ar(\cf4 DelayN\cf3 .ar(sig, maxdel, del[i]), del[i], shift[i]);\
+	\});	\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang) * amp);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 \}),\
+\
+\cf4 SynthDef\cf3 (\cf5 \\tyhi\cf3 , \{\cf4 |out, in, gate = 1.0, amp = 1.0, warp = 0.01, stf, enf, bufnum, \
+		rand, grenv, dur, tdur, maxdel|\cf3 \
+\
+	\cf4 var\cf3  sig, w, x, y, z, point, trig, input, freqs, actr, a, b, c, d, del, shift;\
+	\cf4 var\cf3  xang, yang, zang;\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	del = \cf4 ArrayControl\cf3 .kr(\cf5 \\delays\cf3 , 4, 0);\
+	shift = \cf4 ArrayControl\cf3 .kr(\cf5 \\shifts\cf3 , 4, 1);	\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 	input = \cf4 In\cf3 .ar(in);\
+	actr = \cf4 Slope\cf3 .kr(\cf4 Amplitude\cf3 .kr(input)) > 0.2;\
+	trig = \cf4 Trig\cf3 .kr(actr, tdur);\
+	xang = \cf4 EnvGen\cf3 .kr(\cf4 EnvControl\cf3 .kr(\cf5 \\xang\cf3 ), trig, timeScale: tdur);\
+	yang = \cf4 EnvGen\cf3 .kr(\cf4 EnvControl\cf3 .kr(\cf5 \\yang\cf3 ), trig, timeScale: tdur);\
+	zang = \cf4 EnvGen\cf3 .kr(\cf4 EnvControl\cf3 .kr(\cf5 \\zang\cf3 ), trig, timeScale: tdur);\
+	sig = \cf4 Warp1\cf3 .ar(1, \
+		bufnum, \
+		\cf4 LFSaw\cf3 .kr(warp, 1, 0.5, 0.5),\
+		\cf4 EnvGen\cf3 .kr(\cf4 Env\cf3 ([stf, enf], [tdur], \cf5 \\exp\cf3 ), trig),\
+		\cf4 TRand\cf3 .kr(0.01, 0.1, trig), \
+		grenv, \
+		\cf4 Select\cf3 .kr(\cf4 CoinGate\cf3 .kr(0.5, trig), [\
+			\cf4 SinOsc\cf3 .kr(\cf4 Rand\cf3 (0.5, 3), 0, 5, 10), \
+			\cf4 LFPar\cf3 .kr(rrand(1, 4), rrand(0, pi), \cf4 LFSaw\cf3 .kr(5, 0, 1.5, 2), 5)\
+		]), \
+		rand) * \cf4 EnvGen\cf3 .kr(\cf4 Env\cf3 ([0, 1, 1, 0], [0.1, 0.6, 0.3], \cf5 \\sine\cf3 , 2, 1), \
+			gate, timeScale: dur, doneAction: 2);\
+	sig = sig + (\cf4 Reverb\cf3 .ar(sig, 20) * \cf4 LFNoise0\cf3 .kr(\cf4 LFNoise0\cf3 .kr(0.3, 1.0, 2.0), \
+		0.3, 0.3).floor);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	#a, b, c, d = \cf4 Array\cf3 .fill(4, \{\cf4 |i|\cf3 \
+		\cf4 PitchShift\cf3 .ar(\cf4 DelayN\cf3 .ar(sig, maxdel, del[i]), 0.1, shift[i]);\
+	\});	\
+	#w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang));\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 \}),\
+\
+\pard\pardeftab720\ql\qnatural
+\cf4 SynthDef\cf3 (\cf5 \\swarp\cf3 , \{\cf4 |out, gate, amp, dur, buf, str, end, wrp, frq, wsz, dns, rnd, \
+		xang, yang, zang, doneAction = 2|\cf3 \
+	\cf4 var\cf3  ptr, sig, env, del, a, b, c, d, w, x, y, z;\
+	del = \cf4 ArrayControl\cf3 .kr(\cf5 \\del\cf3 , 4, 1);\
+	env = \cf4 EnvControl\cf3 .kr(\cf5 \\env\cf3 , 16);	\
+	ptr = \cf4 LFSaw\cf3 .kr(wrp, 1).range(str, end);\
+	sig = \cf4 SndWarp\cf3 .ar(buf, ptr, frq, wsz, dns, rnd) * \
+		\cf4 EnvGen\cf3 .kr(env, gate, timeScale: dur, doneAction: doneAction);\
+	sig = \cf4 LeakDC\cf3 .ar(sig ** 0.5);\
+	sig = \cf4 Array\cf3 .fill(4, \{\cf4 |i|\cf3 \
+		\cf4 DelayC\cf3 .ar(sig, delaytime: del@i)\
+	\});\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	 a = \cf4 BLowShelf\cf3 .ar(sig@0, 100.0, 0.65, 0.0);\
+	 b = \cf4 BPeakEQ\cf3 .ar(sig@1, 600.0, 2.0, 0.0 );\
+	 c = \cf4 BPeakEQ\cf3 .ar(sig@2, 2000.0, 2.0, 0.0 );\
+	 d = \cf4 BHiShelf\cf3 .ar(sig@3, 7500.0, 1, 0.0 );	\
+	 #w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+\pard\pardeftab720\ql\qnatural
+\cf3 	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang) * amp);\
+\}),\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 \
+\pard\pardeftab720\ql\qnatural
+\cf4 SynthDef\cf3 (\cf5 \\rwarp\cf3 , \{\cf4 |out, gate, amp, dur, buf, str, end, wrp, frq, wsz, dns, rnd, \
+		xang, yang, zang, doneAction = 2|\cf3 \
+	\cf4 var\cf3  ptr, sig, env, bf, del, a, b, c, d, w, x, y, z;\
+	del = \cf4 ArrayControl\cf3 .kr(\cf5 \\del\cf3 , 4, 1);\
+	env = \cf4 EnvControl\cf3 .kr(\cf5 \\env\cf3 , 16);	\
+	ptr = \cf4 LFSaw\cf3 .kr(wrp, 1).range(str, end);\
+	sig = \cf4 LeakDC\cf3 .ar(\cf4 Warp1\cf3 .ar(1, buf, ptr, frq, wsz, -1, dns, rnd)) * \
+		\cf4 EnvGen\cf3 .kr(env, gate, timeScale: dur, doneAction: doneAction);\
+	sig = \cf4 LeakDC\cf3 .ar(sig ** 0.5);\
+	sig = \cf4 Array\cf3 .fill(4, \{\cf4 |i|\cf3 \
+		\cf4 DelayC\cf3 .ar(sig, delaytime: del@i)\
+	\});\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	 a = \cf4 BLowShelf\cf3 .ar(sig@0, 100.0, 0.65, 0.0);\
+	 b = \cf4 BPeakEQ\cf3 .ar(sig@1, 600.0, 2.0, 0.0 );\
+	 c = \cf4 BPeakEQ\cf3 .ar(sig@2, 2000.0, 2.0, 0.0 );\
+	 d = \cf4 BHiShelf\cf3 .ar(sig@3, 7500.0, 1, 0.0 );\
+	 #w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+\pard\pardeftab720\ql\qnatural
+\cf3 	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang) * amp);\
+\})\
+]\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 \
+}

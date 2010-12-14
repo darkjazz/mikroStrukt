@@ -1,0 +1,547 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red0\green0\blue191;\red0\green115\blue0;
+}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf2 ~liveprocs = (\
+	fbgverb: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\fbgverb\cf2 , \{\cf3 |out, in, gate = 1.0, i_wrp, frq, wsz, dns, rnd, amp, \
+				xang, yang, zang|\cf2 \
+			\cf3 var\cf2  bufs, recs, ptrs, phases, deltimes, output, trigs, input, w, x, y, z;\
+			deltimes = [0, 1 / i_wrp * 0.5, 1 / i_wrp];\
+			bufs = \cf3 Array\cf2 .fill(3, \{ \cf3 LocalBuf\cf2 (\cf3 SampleRate\cf2 .ir * 2) \});\
+			ptrs = \cf3 Array\cf2 .fill(3, \{\cf3 |i|\cf2  \cf3 LFSaw\cf2 .kr(i_wrp, 0, 0.5, 0.5) \});\
+			trigs = \cf3 Array\cf2 .fill(3, \{\cf3 |i|\cf2  \cf3 DelayN\cf2 .kr(\cf3 Impulse\cf2 .kr(i_wrp * (2 / 3)), \
+				deltimes@i, deltimes@i) \});\
+			input = \cf3 In\cf2 .ar(in);\
+			recs = \cf3 Mix\cf2 .fill(3, \{\cf3 |i|\cf2 \
+				\cf3 RecordBuf\cf2 .ar(input, bufs@i, loop:0.0, trigger: trigs@i);\
+			\});\
+			output = \cf3 Mix\cf2 .fill(3, \{\cf3 |i|\cf2 \
+				\cf3 Warp1\cf2 .ar(1, bufs@i, ptrs@i, frq, wsz, -1, dns, rnd)\
+					* \cf3 EnvGen\cf2 .kr(\
+						\cf3 Env\cf2 ([0.0,1.0,1.0,0.0],[0.3,0.4,0.3],\cf4 \\sine\cf2 , 0, 3),\
+						trigs.rotate(-1)@i, timeScale: 1.0 / i_wrp\
+					)\
+			\}) * \cf3 EnvGen\cf2 .kr(\cf3 Env\cf2 ([0.001, 1.0, 1.0, 0.001], [0.3, 0.4, 0.3], \cf4 \\sine\cf2 , 2, 1), \
+				gate, doneAction: 2);\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(\
+					output,\
+					\cf3 DelayN\cf2 .ar(output, 0.01, 0.01),\
+					\cf3 DelayN\cf2 .ar(output, 0.02, 0.02),\
+					\cf3 DelayN\cf2 .ar(output, 0.03, 0.03)\
+			) * amp;\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang))\
+		\}),\
+		specs: (\
+			i_wrp: \cf3 ControlSpec\cf2 (0.005, 0.5),\
+			frq: \cf3 ControlSpec\cf2 (0.25, 2.0, step: 1/4),\
+			wsz: \cf3 ControlSpec\cf2 (0.01, 0.2),\
+			dns: \cf3 ControlSpec\cf2 (1, 10),\
+			rnd: \cf3 ControlSpec\cf2 (0, 0.01),\
+			amp: \cf3 ControlSpec\cf2 (0.3, 1.0),\
+			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)\
+		)\
+	),\
+	\
+	latch: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\latch\cf2 , \{\cf3 |out, in, th, eb1, eb2, rt, damp=0.5, bw=0.5, sp, dry, early, tail, 				gate=1, amp, xang, yang, zang|\cf2 \
+			\
+			\cf3 var\cf2  input, freq, trig, fft, gtrig, rL, rR, w, x, y, z, env, sig, pitch, a, b, c, d;\
+			env = \cf3 Control\cf2 .names([\cf4 \\env\cf2 ]).kr(\cf3 Env\cf2 .newClear(8).asArray);\
+			input = \cf3 In\cf2 .ar(in);\
+			pitch = \cf3 Pitch\cf2 .kr(input)[0];\
+			fft = \cf3 FFT\cf2 (\cf3 LocalBuf\cf2 (512), input);\
+			trig = \cf3 Onsets\cf2 .kr(fft, th);\
+			freq = \cf3 Latch\cf2 .ar(pitch, trig);\
+			gtrig = \cf3 Dust\cf2 .kr(\cf3 SinOsc\cf2 .kr(\cf3 LFNoise2\cf2 .kr(0.5)).range(8, 64));\
+			sig = \cf3 SinGrainI\cf2 .ar(\
+				gtrig, \
+				\cf3 Timer\cf2 .kr(gtrig).clip(0.001, 1.0) * 0.5, \
+				\cf3 Select\cf2 .kr(\cf3 TIRand\cf2 .kr(0, 6, gtrig), \
+					[freq*0.125, freq*0.25, freq*0.5, freq, freq*2, freq*4, freq*8]), \
+				eb1, \
+				eb2, \
+				\cf3 EnvGen\cf2 .kr(\cf3 Env\cf2 ([0.001, 1.0], [1], \cf4 \\sine\cf2 ), trig, timeScale: \cf3 TRand\cf2 .kr(0.3, 3.0, trig))\
+			);\
+			a = \cf3 BLowShelf\cf2 .ar(sig, 100, 0.5, 0.5);\
+			b = \cf3 BPeakEQ\cf2 .ar(sig, 800, 5.0, -16);\
+			c = \cf3 BHiShelf\cf2 .ar(sig, 10000, 1.0, 1.0);\
+			d = \cf3 BPeakEQ\cf2 .ar(sig, 3000, 3.0, -8);\
+			#rL, rR = \cf3 GVerb\cf2 .ar(sig, 500, rt, damp, bw, sp, dry, early, tail, 500)\
+				* \cf3 EnvGen\cf2 .kr(env, gate, doneAction: 2);\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a + rL, b + rR, c + rR, d + rL);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang))\
+		\}),\
+		specs: (\
+			th: \cf3 ControlSpec\cf2 (-40.dbamp, -20.dbamp),\
+			rt: \cf3 ControlSpec\cf2 (3, 20),\
+			sp: \cf3 ControlSpec\cf2 (5, 20),\
+			dry: \cf3 ControlSpec\cf2 (0.5, 0.1),\
+			early: \cf3 ControlSpec\cf2 (0.5, 0.0),\
+			tail: \cf3 ControlSpec\cf2 (0.0, 0.5),\
+			amp: \cf3 Control\cf2 (0.5, 1.0),\
+			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)\
+		)\
+	),\
+	\
+	cliq: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\cliq\cf2 , \{\cf3 |out, in, th, gate=1, amp, sdur, pth|\cf2 \
+	\
+			\cf3 var\cf2   w, x, y, z, input, freq, trig, fft, gtrig, bfr, env, sig, pch, snd, senv, a, b, c, d;\
+			env = \cf3 EnvControl\cf2 .kr;\
+			input = \cf3 In\cf2 .ar(in);\
+			pch = \cf3 Pitch\cf2 .kr(input)[0];\
+			fft = \cf3 FFT\cf2 (\cf3 LocalBuf\cf2 (512), input);\
+			trig = \cf3 Trig\cf2 .ar(\cf3 Onsets\cf2 .kr(fft, th), 0.0025);\
+			gtrig = \cf3 Trig\cf2 .ar(trig, 1);\
+			senv = \cf3 EnvGen\cf2 .kr(\cf3 Env\cf2 ([0.001, 1.0, 1.0, 0.001], [0.01, sdur, 0.1], \cf4 \\exp\cf2 ), gtrig);\
+			sig = \cf3 Mix\cf2 (\
+				\cf3 BPF\cf2 .ar(\
+					\cf3 LFTri\cf2 .ar(20, 0, \cf3 Decay\cf2 .ar(trig, 0.001 * \cf3 LFNoise1\cf2 .ar(4).abs)),\
+					15000,\'a0\
+					0.9,\'a0\
+					25 * \cf3 LFNoise1\cf2 .ar(8).range(0, 1)\'a0\
+				).fold(-1, 1));\
+			sig = \cf3 Mix\cf2 (sig + \cf3 GVerb\cf2 .ar(sig, 1, 0.5, 0.9, 0.9, 1, 0, 0.05, 0.1));\
+			snd = \cf3 Reverb\cf2 .ar(\cf3 Select\cf2 .ar(pch > pth, \
+				[\cf3 Mix\cf2 (\cf3 SinOsc\cf2 .ar(\cf3 Array\cf2 .geom(7, \cf3 Rand\cf2 (40.0, 50.0), 2**(1/5)), 0, \
+					\cf3 Array\cf2 .geom(7, 1.0, 15/16), 0.5pi).tanh) * 0.1, \
+					\cf3 SinOsc\cf2 .ar(pch * 100, 0.5pi, 0.05)\
+			]), 1).fold(-1, 1) * senv;\
+			sig = \cf3 Mix\cf2 (sig + snd) * \cf3 EnvGen\cf2 .kr(env, gate, doneAction: 2);\
+			#a, b, c, d = [\
+				\cf3 BLowShelf\cf2 .ar(sig, 100, 0.5, 0.5),\
+			 	\cf3 BPeakEQ\cf2 .ar(sig, 800, 5.0, -8),\
+				\cf3 BHiShelf\cf2 .ar(sig, 10000, 1.0, 1.0),\
+				\cf3 BPeakEQ\cf2 .ar(sig, 3000, 3.0, -4)\
+			];\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+		 	\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, \
+				\cf3 TRand\cf2 .kr(-pi, pi, trig), \cf3 TRand\cf2 .kr(-pi, pi, trig), \cf3 TRand\cf2 .kr(-pi, pi, trig) ))\
+		\}),\
+		\
+		specs: (\
+			th: \cf3 ControlSpec\cf2 (-40.dbamp, -10.dbamp),\
+			amp: \cf3 ControlSpec\cf2 (0.2, 1.0),\
+			sdur: \cf3 ControlSpec\cf2 (0.01, 0.3),\
+			pth: \cf3 ControlSpec\cf2 (400.0, 1000.0)\
+		)\
+	),\
+	\
+	grains: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\grains\cf2 , \{\cf3 |out, in, gate=1, maxdel=0.1, xang, yang, zang, bfrq|\cf2 \
+			\cf3 var\cf2  a, b, c, d, env, trig, dns, frq, dur, amz, w, x, y, z, input, rnd, ebf;\
+			env = \cf3 EnvControl\cf2 .kr;\
+			dns = \cf3 ArrayControl\cf2 .kr(\cf4 \\dns\cf2 , 4, 1);\
+			dur = \cf3 ArrayControl\cf2 .kr(\cf4 \\dur\cf2 , 4, 1);\
+			rnd = \cf3 ArrayControl\cf2 .kr(\cf4 \\rnd\cf2 , 4, 1);\
+			frq = \cf3 ArrayControl\cf2 .kr(\cf4 \\frq\cf2 , 4, 1);\
+			amz = \cf3 ArrayControl\cf2 .kr(\cf4 \\amz\cf2 , 4, 1);\
+			input = \cf3 CombL\cf2 .ar(\cf3 In\cf2 .ar(in), frq, frq, 4) * \cf3 EnvGen\cf2 .kr(env, gate, doneAction: 2);\
+			trig = \cf3 DelayL\cf2 .kr(\cf3 Impulse\cf2 .kr(dns), maxdel, \cf3 TRand\cf2 .kr(0, rnd, \cf3 Impulse\cf2 .kr(dns*2)));\
+			#a, b, c, d = \cf3 InGrain\cf2 .ar(trig, dur, \
+				(\cf3 PitchShift\cf2 .ar(input, pitchRatio: frq\
+					add: \cf3 LPF\cf2 .ar(\cf3 LFSaw\cf2 .ar(bfrq*frq), \cf3 LFSaw\cf2 .ar((1..4)).exprange(40, 4000)) \
+				)*10).tanh, \
+				amz);\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang))\
+		\}),\
+		\
+		specs: (\
+			bfrq: \cf3 ControlSpec\cf2 (0.125, 1, step: 0.125),\
+			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)\
+		)\
+		\
+		setn: (\
+			dns: (\
+				start: \cf3 ControlSpec\cf2 (1, 50),\
+				step: \cf3 ControlSpec\cf2 (1.618, 1.0618),\
+				curve: \cf4 \\exp\cf2 \
+			),\
+			dur: (  \
+				start: \cf3 ControlSpec\cf2 (0.1, 0.001),\
+				step: \cf3 ControlSpec\cf2 (1.618, 0.97),\
+				curve: \cf4 \\exp\cf2 \
+			),\
+			rnd: (  \
+				start: \cf3 ControlSpec\cf2 (0.1, 0.001),\
+				step: \cf3 ControlSpec\cf2 (1.03, 0.97),\
+				curve: \cf4 \\exp\cf2 \
+			),\
+			frq: (  \
+				start: \cf3 ControlSpec\cf2 (0.107, 0.856, step: 0.107),\
+				step: \cf3 ControlSpec\cf2 (2, 2),\
+				curve: \cf4 \\exp\cf2 \
+			),\
+			amz: (  \
+				start: \cf3 ControlSpec\cf2 (0.4, 0.8),\
+				step: \cf3 ControlSpec\cf2 (1.3, 1.03),\
+				curve: \cf4 \\exp\cf2 \
+			)\
+		)\
+	),\
+	\
+	streamverb: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\streamverb\cf2 , \{\cf3 |out, in, rmsize=300, rtime, hfd, inbw, spread, dry, early, tail, 				max=300, amp, gate=1.0, slope=0.8, xang, yang, zang|\cf2 \
+			\cf3 var\cf2  sig, gverb, ps, ampctr, pu, output, env, a, b, c, d, w, x, y, z;\
+			sig = \cf3 In\cf2 .ar(in);\
+			ampctr = \cf3 Lag\cf2 .kr(\cf3 Amplitude\cf2 .kr(sig), 0.25);\
+			env = \cf3 EnvGen\cf2 .kr(\cf3 EnvControl\cf2 .kr, gate, doneAction: 2);\
+			gverb = \cf3 GVerb\cf2 .ar(sig, rmsize, rtime, hfd, inbw, spread, dry, early, tail, max) * env;\
+			ps = \cf3 PitchShift\cf2 .ar(gverb, \cf3 LFNoise2\cf2 .kr(0.27, 0.19, 0.2), 1.66, ampctr * amp, ampctr * amp);\
+			pu = \cf3 DelayC\cf2 .ar(\
+				\cf3 PitchShift\cf2 .ar(gverb, \cf3 LFNoise2\cf2 .kr(0.31, 0.19, 0.2), 0.33, ampctr * amp, ampctr * amp),\
+				0.05, 0.05);\
+			sig = \cf3 Compander\cf2 .ar(ps ++ pu, ps ++ pu, 0.95, slope, 0.1, 0.04, 0.1);\
+			#a, b, c, d = \cf3 LeakDC\cf2 .ar(sig);\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang))\
+		\}),\
+		\
+		specs: (\
+			rtime: \cf3 ControlSpec\cf2 (5, 30),\
+			hfd: \cf3 ControlSpec\cf2 (0.2, 0.8),\
+			inbw: \cf3 ControlSpec\cf2 (0.8, 0.2),\
+			spread: \cf3 ControlSpec\cf2 (4, 16),\
+			dry: \cf3 ControlSpec\cf2 (0.3, 0.05),\
+			early: \cf3 ControlSpec\cf2 (0.5, 0.1),\
+			tail: \cf3 ControlSpec\cf2 (0.4, 0.8),\
+			amp: \cf3 ControlSpec\cf2 (0.5, 1.0),\
+			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)			\
+		)\
+	)	\
+);\
+\
+~bufprocs = (\
+\
+	bufplay:	(\
+		def: \cf3 SynthDef\cf2 (\cf4 \\bufplay\cf2 , \{\cf3 |out, buf, amp, meters, xang, yang, zang|\cf2 \
+			\cf3 var\cf2  sig, a, b, c, d, del, amps, w, x, y, z;\
+			del = \cf3 ArrayControl\cf2 .kr(\cf4 \\delay\cf2 , 4, 1);\
+			amps = \cf3 ArrayControl\cf2 .kr(\cf4 \\amps\cf2 , 4, 1);\
+			sig = \cf3 PlayBuf\cf2 .ar(1, buf, loop: 0, doneAction: 2);\
+			#a, b, c, d = (\{\cf3 |i|\cf2  \cf3 DelayC\cf2 .ar(sig, del[i], del[i], amps[i]) \} ! 4);\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			#w, x, y, z = \cf3 AtkDistance\cf2 .ar(w, x, y, z, meters);\
+			\cf3 Out\cf2 .ar(0, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang) * amp)\
+		\}),\
+		\
+		specs: (\
+			amp: \cf3 ControlSpec\cf2 (0.6, 1.0),\
+			meters: \cf3 ControlSpec\cf2 (0.5, 3.0),\
+			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)\
+		),\
+		\
+		setn: (\
+			delays: (\
+				start: \cf3 ControlSpec\cf2 (0.03, 0.01),\
+				step: \cf3 ControlSpec\cf2 (1.3, 1.618),\
+				curve: \cf4 \\exp\cf2 \
+			),\
+			amps: (\
+				start: \cf3 ControlSpec\cf2 (0.6, 0.2),\
+				step: \cf3 ControlSpec\cf2 (1.2, 1.618),\
+				curve: \cf4 \\exp\cf2 \
+			)\
+		)\
+	),\
+\
+	pch: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\pch\cf2 , \{\cf3 |out = 0, in, buf, amp, start, winSize, shift, pdisp, tdisp, pow, \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf3 			dur=4, revamp, deltime, gate = 1.0, xang, yang, zang|\cf2 \
+			\cf3 var\cf2  sig, w, x, y, z, point, input, env, a, b, c, d, freqs, bws, eqf, eqr, eqdb;\
+			eqf = \cf3 ArrayControl\cf2 .kr(\cf4 \\eqf\cf2 , 4, 1);\
+			eqr = \cf3 ArrayControl\cf2 .kr(\cf4 \\eqr\cf2 , 4, 1);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			eqdb = \cf3 ArrayControl\cf2 .kr(\cf4 \\eqdb\cf2 , 4, 0);	\
+			env = \cf3 EnvControl\cf2 .kr;\
+			sig = \cf3 DelayC\cf2 .ar(\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf2 				\cf3 PitchShift\cf2 .ar(\
+					\cf3 PlayBuf\cf2 .ar(\
+						1, \
+						buf,\
+						\cf3 LFNoise1\cf2 .kr(\cf3 LFNoise0\cf2 .kr(10, 10, 20), 0.01, 1.0),\
+						\cf3 Dust\cf2 .kr(start),\
+						\cf3 LFNoise0\cf2 .kr(start, 0, \cf3 BufFrames\cf2 .kr(buf)),\
+						1.0\
+					) ** pow,\
+					winSize, \
+					\cf3 LFNoise2\cf2 .kr(\cf3 LFNoise0\cf2 .kr(1, 1, 2), shift, 1.0),\
+					pdisp,\
+					tdisp,\
+					0.5 + (\cf3 In\cf2 .ar(in) * \cf3 LFPulse\cf2 .kr(2, 0, 0.5, 0.25, 0.5))\
+				), 0.5, deltime\
+			) * \cf3 EnvGen\cf2 .kr(env, gate, timeScale: dur, doneAction: 2);\
+			sig = sig + \cf3 Reverb\cf2 .ar(sig * revamp, \cf3 Rand\cf2 (2, 4));\
+			a = \cf3 BLowShelf\cf2 .ar(sig, eqf@0, eqr@0, eqdb@0 );\
+			b = \cf3 BPeakEQ\cf2 .ar(sig, eqf@1, eqr@1, eqdb@1 );\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			c = \cf3 BPeakEQ\cf2 .ar(sig, eqf@2, eqr@2, eqdb@2 );\
+			d = \cf3 BHiShelf\cf2 .ar(sig, eqf@3, eqr@3, eqdb@3 );\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang))\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf2 		\}),\
+		\
+		specs: (\
+			amp: \cf3 ControlSpec\cf2 (0.4, 0.8),\
+			start: \cf3 ControlSpec\cf2 (0.2, 0.6),\
+			winSize: \cf3 ControlSpec\cf2 (0.01, 0.2),\
+			shift: \cf3 ControlSpec\cf2 (0.5, 0.1),\
+			pdisp: \cf3 ControlSpec\cf2 (0.0, 0.5),\
+			tdisp: \cf3 ControlSpec\cf2 (0.5, 0.0),\
+			pow: \cf3 ControlSpec\cf2 (1.0, 1.5),\
+			revamp: \cf3 ControlSpec\cf2 (0.05, 0.5),\
+			deltime: \cf3 ControlSpec\cf2 (0.02, 0.5),\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)			\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf2 		),\
+		\
+		array: (\
+			eqf: \cf3 Array\cf2 .geom(4, 300, 3),\
+			eqr: [0.6, 2, 2, 1],\
+			eqdb: [0, -3, -5, 0]\
+		)\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 	),\
+	\
+	bufmod: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\bufmod\cf2 , \{\cf3 |out, bufc, freqc, bufm, freqm, wsz, which = 0, pch, \
+				amp, wrate, pd, td, maxdel=0.5, xang, yang, zang, gate=1|\cf2 \
+			\cf3 var\cf2  sig, bf, winsize, env, a, b, c, d, del, shift, w, x, y, z;\
+			del = \cf3 ArrayControl\cf2 .kr(\cf4 \\delays\cf2 , 4, 0);\
+			shift = \cf3 ArrayControl\cf2 .kr(\cf4 \\shifts\cf2 , 4, 1);	\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 			env = \cf3 EnvControl\cf2 .kr;\
+			winsize = \cf3 Select\cf2 .kr(which, [wsz, \cf3 TRand\cf2 .kr(0.01, 0.2, \cf3 Impulse\cf2 .kr(wrate))]);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural
+\cf2 			sig = \cf3 PitchShift\cf2 .ar(\cf3 Osc\cf2 .ar(bufc, freqc, \cf3 Osc\cf2 .ar(bufm, freqm)), \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 				winsize, pch, pd, td) * \cf3 EnvGen\cf2 .kr(env, gate, doneAction: 2);\
+			#a, b, c, d = \cf3 Array\cf2 .fill(4, \{\cf3 |i|\cf2 \
+				\cf3 PitchShift\cf2 .ar(\cf3 DelayN\cf2 .ar(sig, maxdel, del[i]), del[i], shift[i]);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 			\});	\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang) * amp);\
+		\}),\
+		\
+		specs: (\
+			freqc: \cf3 ControlSpec\cf2 (0.125, 2, step: 0.125), \
+			freqm: \cf3 ControlSpec\cf2 (2, 0.125, step: 0.125),\
+			wsz: \cf3 ControlSpec\cf2 (0.01, 0.2),\
+			which: \cf3 ControlSpec\cf2 (0, 1, step: 1),\
+			pch: \cf3 ControlSpec\cf2 (0.125, 2.0, step: 0.125),\
+			amp: \cf3 ControlSpec\cf2 (0.3, 1.0),\
+			wrate: \cf3 ControlSpec\cf2 (2, 16, step: 1),\
+			pd: \cf3 ControlSpec\cf2 (0.0, 0.6),\
+			td: \cf3 ControlSpec\cf2 (0.0, 0.6),\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)			\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 		),\
+\
+		array: (\
+			delays: \cf3 Array\cf2 .geom(4, 0.01, 1.618),\
+			shifts: \cf3 Array\cf2 .geom(4, 35/36, 36/35)\
+		)\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 	),\
+	\
+	tyhi: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\tyhi\cf2 , \{\cf3 |out, in, gate = 1.0, amp = 1.0, warp = 0.01, stf, enf, buf, \
+				rand, grenv = -1, dur=4, tdur, maxdel=0.2|\cf2 \
+		\
+			\cf3 var\cf2  sig, w, x, y, z, point, trig, input, freqs, actr, a, b, c, d, del, shift;\
+			\cf3 var\cf2  xang, yang, zang;\
+			del = \cf3 ArrayControl\cf2 .kr(\cf4 \\delays\cf2 , 4, 0);\
+			shift = \cf3 ArrayControl\cf2 .kr(\cf4 \\shifts\cf2 , 4, 1);	\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 			input = \cf3 In\cf2 .ar(in);\
+			actr = \cf3 Slope\cf2 .kr(\cf3 Amplitude\cf2 .kr(input)) > 0.2;\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			trig = \cf3 Trig\cf2 .kr(actr, tdur);\
+			xang = \cf3 EnvGen\cf2 .kr(\cf3 EnvControl\cf2 .kr(\cf4 \\xang\cf2 ), trig, timeScale: tdur);\
+			yang = \cf3 EnvGen\cf2 .kr(\cf3 EnvControl\cf2 .kr(\cf4 \\yang\cf2 ), trig, timeScale: tdur);\
+			zang = \cf3 EnvGen\cf2 .kr(\cf3 EnvControl\cf2 .kr(\cf4 \\zang\cf2 ), trig, timeScale: tdur);\
+			sig = \cf3 Warp1\cf2 .ar(1, \
+				buf, \
+				\cf3 LFSaw\cf2 .kr(warp, 1, 0.5, 0.5),\
+				\cf3 EnvGen\cf2 .kr(\cf3 Env\cf2 ([stf, enf], [tdur], \cf4 \\exp\cf2 ), trig),\
+				\cf3 TRand\cf2 .kr(0.01, 0.1, trig), \
+				grenv, \
+				\cf3 Select\cf2 .kr(\cf3 CoinGate\cf2 .kr(0.5, trig), [\
+					\cf3 SinOsc\cf2 .kr(\cf3 Rand\cf2 (0.5, 3), 0, 5, 10), \
+					\cf3 LFPar\cf2 .kr(rrand(1, 4), rrand(0, pi), \cf3 LFSaw\cf2 .kr(5, 0, 1.5, 2), 5)\
+				]), \
+				rand) * \cf3 EnvGen\cf2 .kr(\cf3 Env\cf2 ([0, 1, 1, 0], [0.1, 0.6, 0.3], \cf4 \\sine\cf2 , 2, 1), \
+					gate, timeScale: dur, doneAction: 2);\
+			sig = sig + (\cf3 Reverb\cf2 .ar(sig, 20) * \cf3 LFNoise0\cf2 .kr(\cf3 LFNoise0\cf2 .kr(0.3, 1.0, 2.0), \
+				0.3, 0.3).floor);\
+			#a, b, c, d = \cf3 Array\cf2 .fill(4, \{\cf3 |i|\cf2 \
+				\cf3 PitchShift\cf2 .ar(\cf3 DelayN\cf2 .ar(sig, maxdel, del[i]), 0.1, shift[i]);\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 			\});	\
+			#w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang));\
+		\}),\
+		\
+		specs: (\
+			amp: \cf3 ControlSpec\cf2 (1.0, 0.6),\
+			warp: \cf3 ControlSpec\cf2 (0.005, 0.1),\
+			stf: \cf3 ControlSpec\cf2 (0.5, 2.0, step: 0.25),\
+			enf: \cf3 ControlSpec\cf2 (0.5, 2.0, step: 0.125),\
+			rand: \cf3 ControlSpec\cf2 (0.0, 0.01),\
+			tdur: \cf3 ControlSpec\cf2 (0.1, 0.3)\
+		),\
+		\
+		array: (\
+			delays: \cf3 Array\cf2 .geom(4, 0.01, 1.618),\
+			shifts: \cf3 Array\cf2 .geom(4, 35/36, 36/35)\
+		),\
+		\
+		envs: (\
+			xang:  \{\cf3 |val|\cf2  \
+				\cf3 var\cf2  points, levels, times, curves, rot;\
+				rot = \cf3 ControlSpec\cf2 (-pi, pi).map(val);\
+				points = \cf3 ControlSpec\cf2 (2, 6, step: 1).map(val);\
+				levels = \cf3 Array\cf2 .rand(points, rot.neg, rot);\
+				times = (1 / (points - 1) ! (points - 1));\
+				curves = (\cf3 ControlSpec\cf2 (-4, 4).map(1 - val) ! points - 1) * [1, -1];\
+				\cf3 Env\cf2 (levels, times, curves)\
+			\},\
+			yang: \{\cf3 |val|\cf2  \
+				\cf3 var\cf2  points, levels, times, curves, rot;\
+				rot = \cf3 ControlSpec\cf2 (-pi, pi).map(val);\
+				points = \cf3 ControlSpec\cf2 (2, 6, step: 1).map(val);\
+				levels = \cf3 Array\cf2 .rand(points, rot.neg, rot);\
+				times = (1 / (points - 1) ! (points - 1));\
+				curves = (\cf3 ControlSpec\cf2 (-4, 4).map(1 - val) ! points - 1) * [1, -1];\
+				\cf3 Env\cf2 (levels, times, curves)\
+			\},\
+			zang: \{\cf3 |val|\cf2  \
+				\cf3 var\cf2  points, levels, times, curves, rot;\
+				rot = \cf3 ControlSpec\cf2 (-pi, pi).map(val);\
+				points = \cf3 ControlSpec\cf2 (2, 6, step: 1).map(val);\
+				levels = \cf3 Array\cf2 .rand(points, rot.neg, rot);\
+				times = (1 / (points - 1) ! (points - 1));\
+				curves = (\cf3 ControlSpec\cf2 (-4, 4).map(1 - val) ! points - 1) * [1, -1];\
+				\cf3 Env\cf2 (levels, times, curves)\
+			\}\
+		)\
+		\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 	),\
+	\
+	swarp: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\swarp\cf2 , \{\cf3 |out, gate, amp, dur=4, buf, str, end, wrp, frq, wsz, dns, rnd, \
+\pard\pardeftab720\ql\qnatural
+\cf3 				xang, yang, zang, doneAction = 2|\cf2 \
+			\cf3 var\cf2  ptr, sig, env, del, a, b, c, d, w, x, y, z;\
+			del = \cf3 ArrayControl\cf2 .kr(\cf4 \\del\cf2 , 4, 1);\
+			env = \cf3 EnvControl\cf2 .kr(\cf4 \\env\cf2 , 16);	\
+			ptr = \cf3 LFSaw\cf2 .kr(wrp, 1).range(str, end);\
+			sig = \cf3 SndWarp\cf2 .ar(buf, ptr, frq, wsz, dns, rnd) * \
+				\cf3 EnvGen\cf2 .kr(env, gate, timeScale: dur, doneAction: doneAction);\
+			sig = \cf3 LeakDC\cf2 .ar(sig ** 0.5);\
+			sig = \cf3 Array\cf2 .fill(4, \{\cf3 |i|\cf2 \
+				\cf3 DelayC\cf2 .ar(sig, delaytime: del@i)\
+			\});\
+			 a = \cf3 BLowShelf\cf2 .ar(sig@0, 100.0, 0.65, 0.0);\
+			 b = \cf3 BPeakEQ\cf2 .ar(sig@1, 600.0, 2.0, 0.0 );\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 			 c = \cf3 BPeakEQ\cf2 .ar(sig@2, 2000.0, 2.0, 0.0 );\
+			 d = \cf3 BHiShelf\cf2 .ar(sig@3, 7500.0, 1, 0.0 );	\
+			 #w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang) * amp);\
+		\}),\
+		\
+		specs: (\
+			amp: \cf3 ControlSpec\cf2 (1.0, 0.5),\
+			str: \cf3 ControlSpec\cf2 (0.0, 0.5),\
+			end: \cf3 ControlSpec\cf2 (1.0, 0.5),\
+			wrp: \cf3 ControlSpec\cf2 (0.001, 0.01),\
+			frq: \cf3 ControlSpec\cf2 (0.125, 2.0, step: 0.125),\
+			wsz: \cf3 ControlSpec\cf2 (0.01, 0.2),\
+			dns: \cf3 ControlSpec\cf2 (8, 1),\
+			rnd: \cf3 ControlSpec\cf2 (0.0, 0.05),\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 		),\
+		\
+		array: (\
+			del: \cf3 Array\cf2 .geom(4, 0.01, 1.618)\
+		)\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 	),\
+	\
+	rwarp: (\
+		def: \cf3 SynthDef\cf2 (\cf4 \\swarp\cf2 , \{\cf3 |out, gate, amp, dur=4, buf, str, end, wrp, frq, wsz, dns, rnd, \
+\pard\pardeftab720\ql\qnatural
+\cf3 				xang, yang, zang, doneAction = 2|\cf2 \
+			\cf3 var\cf2  ptr, sig, env, del, a, b, c, d, w, x, y, z;\
+			del = \cf3 ArrayControl\cf2 .kr(\cf4 \\del\cf2 , 4, 1);\
+			env = \cf3 EnvControl\cf2 .kr(\cf4 \\env\cf2 , 16);	\
+			ptr = \cf3 LFSaw\cf2 .kr(wrp, 1).range(str, end);\
+			sig = \cf3 SndWarp\cf2 .ar(buf, ptr, frq, wsz, dns, rnd) * \
+				\cf3 EnvGen\cf2 .kr(env, gate, timeScale: dur, doneAction: doneAction);\
+			sig = \cf3 LeakDC\cf2 .ar(sig ** 0.5);\
+			sig = \cf3 Array\cf2 .fill(4, \{\cf3 |i|\cf2 \
+				\cf3 DelayC\cf2 .ar(sig, delaytime: del@i)\
+			\});\
+			 a = \cf3 BLowShelf\cf2 .ar(sig@0, 100.0, 0.65, 0.0);\
+			 b = \cf3 BPeakEQ\cf2 .ar(sig@1, 600.0, 2.0, 0.0 );\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 			 c = \cf3 BPeakEQ\cf2 .ar(sig@2, 2000.0, 2.0, 0.0 );\
+			 d = \cf3 BHiShelf\cf2 .ar(sig@3, 7500.0, 1, 0.0 );	\
+			 #w, x, y, z = \cf3 A2B\cf2 .ar(a, b, c, d);\
+			\cf3 Out\cf2 .ar(out, \cf3 AtkRotateXYZ\cf2 .ar(w, x, y, z, xang, yang, zang) * amp);\
+		\}),\
+		\
+		specs: (\
+			amp: \cf3 ControlSpec\cf2 (0.5, 1.0),\
+			str: \cf3 ControlSpec\cf2 (0.0, 0.5),\
+			end: \cf3 ControlSpec\cf2 (1.0, 0.5),\
+			wrp: \cf3 ControlSpec\cf2 (0.001, 0.01),\
+			frq: \cf3 ControlSpec\cf2 (0.25, 2.0, step: 0.125),\
+			wsz: \cf3 ControlSpec\cf2 (0.01, 0.2),\
+			dns: \cf3 ControlSpec\cf2 (8, 1),\
+			rnd: \cf3 ControlSpec\cf2 (0.0, 0.1),\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 			xang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			yang: \cf3 ControlSpec\cf2 (-pi, pi),\
+			zang: \cf3 ControlSpec\cf2 (-pi, pi)\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf2 		),\
+		\
+		array: (\
+			del: \cf3 Array\cf2 .geom(4, 0.01, 1.618)\
+		)\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf2 	)\
+	\
+)}

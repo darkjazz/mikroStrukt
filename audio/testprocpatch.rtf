@@ -1,0 +1,110 @@
+{\rtf1\ansi\ansicpg1252\cocoartf949\cocoasubrtf540
+{\fonttbl\f0\fnil\fcharset238 Inconsolata;}
+{\colortbl;\red255\green255\blue255;\red191\green0\blue0;\red0\green0\blue0;\red0\green0\blue191;
+\red0\green115\blue0;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+
+\f0\fs24 \cf2 //mikro:strukt\cf3 \
+\
+(\
+\cf4 SynthDef\cf3 (\cf5 \\playPatch\cf3 , \{\cf4 |out, buf, amp|\cf3 \
+	\cf4 var\cf3  sig;\
+	sig = \cf4 PlayBuf\cf3 .ar(1, buf, loop: 0, doneAction: 2);\
+	\cf4 Out\cf3 .ar(out, sig);\
+	\cf4 Out\cf3 .ar(0, sig.dup * amp)\
+\}).add;\
+\
+\pard\pardeftab720\ql\qnatural
+\cf4 SynthDef\cf3 (\cf5 \\rwarp\cf3 , \{\cf4 |out, gate, amp, dur, buf, str, end, wrp, frq, wsz, dns, rnd, \
+		xang, yang, zang, doneAction = 2|\cf3 \
+	\cf4 var\cf3  ptr, sig, env, bf, del, a, b, c, d, w, x, y, z;\
+	del = \cf4 ArrayControl\cf3 .kr(\cf5 \\del\cf3 , 4, 1);\
+	env = \cf4 EnvControl\cf3 .kr(\cf5 \\env\cf3 , 16);	\
+	ptr = \cf4 LFSaw\cf3 .kr(wrp, 1).range(str, end);\
+	sig = \cf4 LeakDC\cf3 .ar(\cf4 Warp1\cf3 .ar(1, buf, ptr, frq, wsz, -1, dns, rnd)) * \
+		\cf4 EnvGen\cf3 .kr(env, gate, timeScale: dur, doneAction: doneAction);\
+	sig = \cf4 LeakDC\cf3 .ar(sig ** 0.5);\
+	sig = \cf4 Array\cf3 .fill(4, \{\cf4 |i|\cf3 \
+		\cf4 DelayC\cf3 .ar(sig, delaytime: del@i)\
+	\});\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardeftab720\ql\qnatural\pardirnatural
+\cf3 	 a = \cf4 BLowShelf\cf3 .ar(sig@0, 100.0, 0.65, 0.0);\
+	 b = \cf4 BPeakEQ\cf3 .ar(sig@1, 600.0, 2.0, 0.0 );\
+	 c = \cf4 BPeakEQ\cf3 .ar(sig@2, 2000.0, 2.0, 0.0 );\
+	 d = \cf4 BHiShelf\cf3 .ar(sig@3, 7500.0, 1, 0.0 );\
+	 #w, x, y, z = \cf4 A2B\cf3 .ar(a, b, c, d);\
+\pard\pardeftab720\ql\qnatural
+\cf3 	\cf4 Out\cf3 .ar(out, \cf4 AtkRotateXYZ\cf3 .ar(w, x, y, z, xang, yang, zang) * amp);\
+\}).add;\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
+\cf3 		\
+\cf4 SynthDef\cf3 (\cf5 \\btoUHJ\cf3 , \{\cf4 |bus, amp = 1|\cf3 \
+	\cf4 var\cf3  w, x, y, z;\
+	#w, x, y, z = \cf4 Limiter\cf3 .ar(\cf4 In\cf3 .ar(bus, 4), 0.99);	\
+\cf2 //	#w, x, y, z = Compander.ar([w, x, y, z], 0.9, 1, 0.5, 0.01, 0.01);\cf3 \
+	\cf4 Out\cf3 .ar(0, \cf4 B2UHJ\cf3 .ar(w, x, y) * amp)\
+\}).add;\
+\
+~ibus = \cf4 Bus\cf3 .audio(s);\
+~bbus = \cf4 Bus\cf3 .audio(s, 4);\
+\
+)\
+s.queryAllNodes\
+~genv3 = \cf4 Buffer\cf3 .sendCollection(s, \cf4 Env\cf3 .perc.asSignal(512));\
+(\
+~grp = \cf4 Group\cf3 ();\
+~dec = \cf4 Synth\cf3 .after(~grp, \cf5 \\btoUHJ\cf3 , [\cf5 \\bus\cf3 , ~bbus]);\
+\
+\cf4 Routine\cf3 (\{\
+\cf2 //	var genv1, genv2;\cf3 \
+\cf2 //	~genv1 = Buffer.sendCollection(s, \cf3 \
+\cf2 //		Env.new([0.001, 1.0, 0.001], [0.05, 0.95], \\sine).asSignal(512));\cf3 \
+\cf2 //	~genv2 = Buffer.sendCollection(s, \cf3 \
+\cf2 //		Env.new([0.001, 1.0, 0.001], [0.95, 0.05], \\sine).asSignal(512));\cf3 \
+\cf2 //	s.sync;\cf3 \
+	~prc = \cf4 Synth\cf3 .tail(~grp, \cf5 \\rwarp\cf3 , [\cf5 \\out\cf3 , ~bbus, \cf5 \\in\cf3 , ~ibus, \
+				\cf5 \\amp\cf3 , 1.0, \cf5 \\dur\cf3 , 5, \cf5 \\buf\cf3 , ~newbuffers[33], \cf5 \\str\cf3 , 0, \cf5 \\end\cf3 , 1, \cf5 \\wrp\cf3 , 0.01, \
+				\cf5 \\frq\cf3 , 0.25, \cf5 \\wsz\cf3 , 0.01, \cf5 \\dns\cf3 , 2, \cf5 \\rnd\cf3 , 0,  \
+				\cf5 \\xang\cf3 , 0, \cf5 \\yang\cf3 , 0, \cf5 \\zang\cf3 , 0])\
+\cf2 //		.setn(\\eqf, [100, 1000, 5000, 10000])\cf3 \
+\cf2 //		.setn(\\eqr, [1, 3, 5, 8])\cf3 \
+\cf2 //		.setn(\\eqdb, [0, -6, -3, 0])		\cf3 \
+\cf2 //		.setn(\\delays, Array.geom(4, 0.01, 1.618))\cf3 \
+\cf2 //		.setn(\\shifts, [15/16, 35/36, 1, 36/35])\cf3 \
+		.setn(\cf5 \\del\cf3 , \cf4 Array\cf3 .geom(4, 0.01, 144/89))\
+		.setn(\cf5 \\env\cf3 , \cf4 Env\cf3 ([0.001, 1.0, 1.0, 0.001], [0.1, 0.5, 0.4], \cf5 \\sine\cf3 , 2, 1).asArray);\
+	\cf4 inf\cf3 .do(\{\
+		~buffers.scramble.do(\{\cf4 |buf|\cf3 \
+			\cf4 var\cf3  dur;\
+			dur = buf.numFrames / buf.sampleRate;		\
+			\cf4 Synth\cf3 .before(~grp, \cf5 \\playPatch\cf3 , [\cf5 \\out\cf3 , ~ibus, \cf5 \\buf\cf3 , buf, \cf5 \\amp\cf3 , 0.0]);\
+			dur.wait;\
+		\})\
+	\})\
+	\
+\}).play\
+)\
+19.fib\
+s.scope(2)\
+\
+\cf4 MasterEQ\cf3 (2)\
+\
+~prc.set(\cf5 \\buf\cf3 , ~newbuffers[33])\
+\
+~prc.set(\cf5 \\th\cf3 , -10.dbamp)\
+\
+~prc.set(\cf5 \\bufc\cf3 , ~newbuffers[1])\
+\
+~prc.set(\cf5 \\rnd\cf3 , 0.1)\
+\
+~prc.set(\cf5 \\amp\cf3 , 4.0)\
+\
+~prc.set(\cf5 \\pth\cf3 , 100)\
+\
+~prc.setn(\cf5 \\dns\cf3 , (20 ! 4) )\
+\
+~prc.setn(\cf5 \\dur\cf3 , \cf4 Array\cf3 .geom(4, 0.03, 0.7) )\
+\
+~prc.set(\cf5 \\gate\cf3 , -10)\
+\
+~intervals}
